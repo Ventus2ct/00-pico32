@@ -109,7 +109,7 @@ static void parse_utc_time(esp_gps_t *esp_gps)
     }
 }
 
-#if CONFIG_NMEA_STATEMENT_GGA
+// #if CONFIG_NMEA_STATEMENT_GGA
 /**
  * @brief Parse GGA statements
  *
@@ -157,9 +157,9 @@ static void parse_gga(esp_gps_t *esp_gps)
         break;
     }
 }
-#endif
+// #endif
 
-#if CONFIG_NMEA_STATEMENT_GSA
+// #if CONFIG_NMEA_STATEMENT_GSA
 /**
  * @brief Parse GSA statements
  *
@@ -189,9 +189,9 @@ static void parse_gsa(esp_gps_t *esp_gps)
         break;
     }
 }
-#endif
+// #endif
 
-#if CONFIG_NMEA_STATEMENT_GSV
+// #if CONFIG_NMEA_STATEMENT_GSV
 /**
  * @brief Parse GSV statements
  *
@@ -241,7 +241,7 @@ static void parse_gsv(esp_gps_t *esp_gps)
 }
 #endif
 
-#if CONFIG_NMEA_STATEMENT_RMC
+// #if CONFIG_NMEA_STATEMENT_RMC
 /**
  * @brief Parse RMC statements
  *
@@ -291,7 +291,7 @@ static void parse_rmc(esp_gps_t *esp_gps)
         break;
     }
 }
-#endif
+// #endif
 
 #if CONFIG_NMEA_STATEMENT_GLL
 /**
@@ -372,26 +372,26 @@ static esp_err_t parse_item(esp_gps_t *esp_gps)
     if (esp_gps->item_num == 0 && esp_gps->item_str[0] == '$') {
         if (0) {
         }
-#if CONFIG_NMEA_STATEMENT_GGA
+// #if CONFIG_NMEA_STATEMENT_GGA
         else if (strstr(esp_gps->item_str, "GGA")) {
             esp_gps->cur_statement = STATEMENT_GGA;
         }
-#endif
-#if CONFIG_NMEA_STATEMENT_GSA
+// #endif
+// #if CONFIG_NMEA_STATEMENT_GSA
         else if (strstr(esp_gps->item_str, "GSA")) {
             esp_gps->cur_statement = STATEMENT_GSA;
         }
-#endif
-#if CONFIG_NMEA_STATEMENT_RMC
+// #endif
+// #if CONFIG_NMEA_STATEMENT_RMC
         else if (strstr(esp_gps->item_str, "RMC")) {
             esp_gps->cur_statement = STATEMENT_RMC;
         }
-#endif
-#if CONFIG_NMEA_STATEMENT_GSV
+// #endif
+// #if CONFIG_NMEA_STATEMENT_GSV
         else if (strstr(esp_gps->item_str, "GSV")) {
             esp_gps->cur_statement = STATEMENT_GSV;
         }
-#endif
+// #endif
 #if CONFIG_NMEA_STATEMENT_GLL
         else if (strstr(esp_gps->item_str, "GLL")) {
             esp_gps->cur_statement = STATEMENT_GLL;
@@ -411,26 +411,26 @@ static esp_err_t parse_item(esp_gps_t *esp_gps)
     if (esp_gps->cur_statement == STATEMENT_UNKNOWN) {
         goto out;
     }
-#if CONFIG_NMEA_STATEMENT_GGA
+// #if CONFIG_NMEA_STATEMENT_GGA
     else if (esp_gps->cur_statement == STATEMENT_GGA) {
         parse_gga(esp_gps);
     }
-#endif
-#if CONFIG_NMEA_STATEMENT_GSA
+// #endif
+// #if CONFIG_NMEA_STATEMENT_GSA
     else if (esp_gps->cur_statement == STATEMENT_GSA) {
         parse_gsa(esp_gps);
     }
-#endif
-#if CONFIG_NMEA_STATEMENT_GSV
+// #endif
+// #if CONFIG_NMEA_STATEMENT_GSV
     else if (esp_gps->cur_statement == STATEMENT_GSV) {
         parse_gsv(esp_gps);
     }
-#endif
-#if CONFIG_NMEA_STATEMENT_RMC
+// #endif
+// #if CONFIG_NMEA_STATEMENT_RMC
     else if (esp_gps->cur_statement == STATEMENT_RMC) {
         parse_rmc(esp_gps);
     }
-#endif
+// #endif
 #if CONFIG_NMEA_STATEMENT_GLL
     else if (esp_gps->cur_statement == STATEMENT_GLL) {
         parse_gll(esp_gps);
@@ -502,28 +502,28 @@ static esp_err_t gps_decode(esp_gps_t *esp_gps, size_t len)
             /* CRC passed */
             if (esp_gps->crc == crc) {
                 switch (esp_gps->cur_statement) {
-#if CONFIG_NMEA_STATEMENT_GGA
+// #if CONFIG_NMEA_STATEMENT_GGA
                 case STATEMENT_GGA:
                     esp_gps->parsed_statement |= 1 << STATEMENT_GGA;
                     break;
-#endif
-#if CONFIG_NMEA_STATEMENT_GSA
+//
+// #if CONFIG_NMEA_STATEMENT_GSA
                 case STATEMENT_GSA:
                     esp_gps->parsed_statement |= 1 << STATEMENT_GSA;
                     break;
-#endif
-#if CONFIG_NMEA_STATEMENT_RMC
+// #endif
+// #if CONFIG_NMEA_STATEMENT_RMC
                 case STATEMENT_RMC:
                     esp_gps->parsed_statement |= 1 << STATEMENT_RMC;
                     break;
-#endif
-#if CONFIG_NMEA_STATEMENT_GSV
+// #endif
+// #if CONFIG_NMEA_STATEMENT_GSV
                 case STATEMENT_GSV:
                     if (esp_gps->sat_num == esp_gps->sat_count) {
                         esp_gps->parsed_statement |= 1 << STATEMENT_GSV;
                     }
                     break;
-#endif
+// #endif
 #if CONFIG_NMEA_STATEMENT_GLL
                 case STATEMENT_GLL:
                     esp_gps->parsed_statement |= 1 << STATEMENT_GLL;
@@ -657,18 +657,18 @@ nmea_parser_handle_t nmea_parser_init(const nmea_parser_config_t *config)
         ESP_LOGE(GPS_TAG, "calloc memory for runtime buffer failed");
         goto err_buffer;
     }
-#if CONFIG_NMEA_STATEMENT_GSA
+// #if CONFIG_NMEA_STATEMENT_GSA
     esp_gps->all_statements |= (1 << STATEMENT_GSA);
-#endif
-#if CONFIG_NMEA_STATEMENT_GSV
+// #endif
+//#if CONFIG_NMEA_STATEMENT_GSV
     esp_gps->all_statements |= (1 << STATEMENT_GSV);
-#endif
-#if CONFIG_NMEA_STATEMENT_GGA
+// #endif
+// #if CONFIG_NMEA_STATEMENT_GGA
     esp_gps->all_statements |= (1 << STATEMENT_GGA);
-#endif
-#if CONFIG_NMEA_STATEMENT_RMC
+// #endif
+// #if CONFIG_NMEA_STATEMENT_RMC
     esp_gps->all_statements |= (1 << STATEMENT_RMC);
-#endif
+// #endif
 #if CONFIG_NMEA_STATEMENT_GLL
     esp_gps->all_statements |= (1 << STATEMENT_GLL);
 #endif
