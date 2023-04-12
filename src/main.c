@@ -6,11 +6,96 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/uart.h"
+#include "esp_log.h"
+#include "nmea_parser.h"
+
+
 // #include "esp_chip_info.h"
 #include "esp_flash.h"
+// #include <HardwareSerial.h>
+
+#define BUF_SIZE (1024)
+#define TXD_PIN (GPIO_NUM_23)
+#define RXD_PIN (GPIO_NUM_19)
 
 TaskHandle_t sendHandle = NULL;
 TaskHandle_t recvHandle = NULL;
+TaskHandle_t gpsrecvHandle = NULL;
+
+static const char *TAG = "gps_demo";
+#define TIME_ZONE (+2)   //Beijing Time
+#define YEAR_BASE (2000) //date in GPS starts from 2000
+
+#define NMEA_PARSER_CONFIG_aSid()       \
+    {                                      \
+        .uart = {                          \
+            .uart_port = UART_NUM_1,       \
+            .rx_pin = GPIO_NUM_19,         \
+            .baud_rate = 9600,             \
+            .data_bits = UART_DATA_8_BITS, \
+            .parity = UART_PARITY_DISABLE, \
+            .stop_bits = UART_STOP_BITS_1, \
+            .event_queue_size = 16         \
+        }                                  \
+    }
+
+void gpsTask()
+{
+    uint8_t *data = (uint8_t *)malloc(BUF_SIZE);
+    while(1)
+    {
+        int len = uart_read_bytes(UART_NUM_1, data, BUF_SIZE, pdMS_TO_TICKS(10));
+        if (len > 0)
+        {
+            // printf("UART read %d bytes: '%.*s'\n", len, len, data);
+            printf("Read %d bytes: ", len);
+            printf("'");
+            for(int i = 0; i < len;i++)
+            {
+                // printf("%s", (char *)data[i]);
+                if(data[i] > 31 && data[i] < 127 )
+                {
+                    printf("%c", data[i]);
+                }
+            }
+            printf("'\n");
+        }
+        vTaskDelay(1);
+    }
+    free(data);
+}
+/**
+ * @brief GPS Event Handler
+ *
+ * @param event_handler_arg handler specific arguments
+ * @param event_base event base, here is fixed to ESP_NMEA_EVENT
+ * @param event_id event id
+ * @param event_data event specific arguments
+ */
+static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
+{
+    gps_t *gps = NULL;
+    switch (event_id) {
+    case GPS_UPDATE:
+        gps = (gps_t *)event_data;
+        /* print information parsed from GPS statements */
+        ESP_LOGI(TAG, "%d/%d/%d %d:%d:%d => \r\n"
+                 "\t\t\t\t\t\tlatitude   = %.05f°N\r\n"
+                 "\t\t\t\t\t\tlongitude = %.05f°E\r\n"
+                 "\t\t\t\t\t\taltitude   = %.02fm\r\n"
+                 "\t\t\t\t\t\tspeed      = %fm/s",
+                 gps->date.year + YEAR_BASE, gps->date.month, gps->date.day,
+                 gps->tim.hour + TIME_ZONE, gps->tim.minute, gps->tim.second,
+                 gps->latitude, gps->longitude, gps->altitude, gps->speed);
+        break;
+    case GPS_UNKNOWN:
+        /* print unknown statements */
+        ESP_LOGW(TAG, "Unknown statement:%s", (char *)event_data);
+        break;
+    default:
+        break;
+    }
+}
 
 void sendTask(void *arg)
 {
@@ -60,12 +145,12 @@ void recvTask(void *arg)
             continue;
         }
 
-        printf("received: %x : ",  message.identifier);
+        // printf("ID: %x : ",  message.identifier);
         for (size_t i = 0; i < message.data_length_code; i++)
         {
-            printf("%x", message.data[i]);
+           // printf("%#1x ", message.data[i]);
         }
-        printf("\n");
+        //printf(" Len: %x\n", message.data_length_code);
     }
 }
 
@@ -78,7 +163,8 @@ void app_main()
     // twai_timing_config_t t_config = {.brp = 104, .tseg_1 = 14, .tseg_2 = 8, .sjw = 4, .triple_sampling = false};
     // https://www.kvaser.com/support/calculators/bit-timing-calculator/
     /*
-    80mhz iirc the CAN controller is clocked with APB clock
+    80mhz iirc 
+    the CAN controller is clocked with APB clock
 
 typedef struct {
     uint32_t brp;                   *< Baudrate prescaler (i.e., APB clock divider). Any even number from 2 to 128 for ESP32, 2 to 32768 for ESP32S2.
@@ -117,9 +203,30 @@ typedef struct {
         printf("Failed to start driver\n");
         return;
     }
+    // NMEA_PARSER_CONFIG_aSid()
+
+
+    /* NMEA parser configuration */
+    nmea_parser_config_t config = NMEA_PARSER_CONFIG_aSid();
+    //nmea_parser_config_t config = NMEA_PARSER_CONFIG_DEFAULT();
+    
+    /* init NMEA parser library */
+    nmea_parser_handle_t nmea_hdl = nmea_parser_init(&config);
+
+    /* register event handler for NMEA parser library */
+    nmea_parser_add_handler(nmea_hdl, gps_event_handler, NULL);
+    
+
+    vTaskDelay(10000 / portTICK_PERIOD_MS);
+
+    // ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
+    // ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    // ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, BUF_SIZE * 2, 256, 0, NULL, 0));
 
     // xTaskCreate(sendTask, "Send Task", 4096, NULL, 10, &sendHandle);
     xTaskCreate(recvTask, "Recv Task", 4096, NULL, 10, &recvHandle);
+    //xTaskCreate(gpsTask, "GPS Task", 4096, NULL, 10, &gpsrecvHandle);
+    // gpsrecvHandle gpsTask
 }
 
 void first_main() 
