@@ -239,7 +239,7 @@ static void parse_gsv(esp_gps_t *esp_gps)
         break;
     }
 }
-#endif
+// #endif
 
 // #if CONFIG_NMEA_STATEMENT_RMC
 /**
