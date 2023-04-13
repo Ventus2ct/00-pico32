@@ -83,16 +83,21 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
     switch (event_id) {
     case GPS_UPDATE:
         gps = (gps_t *)event_data;
+        //char * Stat[5] = (char) gps->valid ? "true" : "false";
         /* print information parsed from GPS statements */
         ESP_LOGI(TAG, "%d/%d/%d %02d:%02d:%02d => "
                  "\tlatitude   = %.05f °N\r\n"
                  "\t\t\t\t\t\tlongitude  = %.05f °E\r\n"
                  "\t\t\t\t\t\taltitude   = %.02f m\r\n"
-                 "\t\t\t\t\t\tspeed      = %f m/s",
+                 "\t\t\t\t\t\tspeed      = %f m/s \r\n"
+                 "\t\t\t\t\t\tSatellites = %d \r\n"
+                 "\t\t\t\t\t\t%s",
                  gps->date.year + YEAR_BASE, gps->date.month, gps->date.day,
                  gps->tim.hour + TIME_ZONE, gps->tim.minute, gps->tim.second,
-                 gps->latitude, gps->longitude, gps->altitude, gps->speed);
-        
+                 gps->latitude, gps->longitude, gps->altitude, gps->speed, 
+                 gps->sats_in_use, gps->valid ? "Valid fix" : "No fix");
+         /* print information parsed from GPS statements */
+        // ESP_LOGI(TAG,"Satellites: %d, Valid fix: %s ", gps->sats_in_use, gps->valid ? "true" : "false");
         break;
     case GPS_UNKNOWN:
         /* print unknown statements */
@@ -120,7 +125,7 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
     t.tm_sec = gps->tim.second;
 
     time_t timeSinceEpoch = mktime(&t);
-    timeSinceEpoch += 3600 * 2;
+    timeSinceEpoch += TimeZoneCorrectionInSecons;
     // printf("timestamp:%ld\n",timeSinceEpoch);
 
     now.tv_sec = timeSinceEpoch;

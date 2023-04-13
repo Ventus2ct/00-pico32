@@ -1,0 +1,37 @@
+https://github.com/espressif/esp-idf/issues/8320
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include "sys/time.h"
+
+void app_main(void)
+{
+    /* set time */
+    struct tm t = {0}; 
+    struct timeval now = {0};
+
+    /* get time */
+    time_t now1 = {0};
+    char strftime_buf[64] = {0};
+    struct tm timeinfo= {0};
+
+    /* ------------------------- */
+    t.tm_year = (2022 - 1900);
+    t.tm_mon = 1;
+    t.tm_mday = 31;
+    t.tm_hour = 17;
+    t.tm_min = 50;
+    t.tm_sec = 45;
+
+    time_t timeSinceEpoch = mktime(&t);
+    printf("timestamp:%d\n",timeSinceEpoch);
+
+    now.tv_sec = timeSinceEpoch;
+    settimeofday(&now, NULL);
+
+    /* -------------------------- */
+    time(&now1);
+    localtime_r(&now1, &timeinfo);
+    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+    printf("gettime: %d %d %d %d %d %d\n",timeinfo.tm_year + 1900,timeinfo.tm_mon,timeinfo.tm_mday,timeinfo.tm_hour,timeinfo.tm_min,timeinfo.tm_sec);
+}
