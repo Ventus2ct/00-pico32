@@ -88,7 +88,7 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
                  "\tlatitude   = %.05f °N\r\n"
                  "\t\t\t\t\t\tlongitude  = %.05f °E\r\n"
                  "\t\t\t\t\t\taltitude   = %.02f m\r\n"
-                 "\t\t\t\t\t\tspeed      = %f m/s\r\n",
+                 "\t\t\t\t\t\tspeed      = %f m/s",
                  gps->date.year + YEAR_BASE, gps->date.month, gps->date.day,
                  gps->tim.hour + TIME_ZONE, gps->tim.minute, gps->tim.second,
                  gps->latitude, gps->longitude, gps->altitude, gps->speed);
@@ -121,7 +121,7 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
 
     time_t timeSinceEpoch = mktime(&t);
     timeSinceEpoch += 3600 * 2;
-    printf("timestamp:%ld\n",timeSinceEpoch);
+    // printf("timestamp:%ld\n",timeSinceEpoch);
 
     now.tv_sec = timeSinceEpoch;
     settimeofday(&now, NULL);
@@ -130,13 +130,13 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
     time(&now1);
     localtime_r(&now1, &timeinfo);
     strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    printf("gettime: %d %d %d %d %d %d\n",timeinfo.tm_year + 1900,timeinfo.tm_mon,timeinfo.tm_mday,timeinfo.tm_hour,timeinfo.tm_min,timeinfo.tm_sec);
+    // printf("gettime: %d %d %d %d %d %d\n",timeinfo.tm_year + 1900,timeinfo.tm_mon,timeinfo.tm_mday,timeinfo.tm_hour,timeinfo.tm_min,timeinfo.tm_sec);
     
     struct tm timeinfo1;
     //char strftime_buf[64];
     localtime_r(&now1, &timeinfo1);
     strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo1);
-    ESP_LOGI(TAG, "The current date/time in Oslo is: %s", strftime_buf);
+    ESP_LOGI(TAG, "The current date/time in Oslo is: %s\n\r", strftime_buf);
 
 
 }
