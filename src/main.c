@@ -102,43 +102,41 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
         break;
     }
     
-    // // Europe/Oslo	CET-1CEST,M3.5.0,M10.5.0/3
-    time_t now;
-    time(&now);
-    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3",1);
-    tzset();
-    // struct tm timeinfo;
-    // char strftime_buf[64];
-    // localtime_r(&timeinfo, &timeinfo);
-    // strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    // ESP_LOGI(TAG, "The current date/time in Oslo is: %s", strftime_buf);
+    /* set time */
+    struct tm t = {0}; 
+    struct timeval now = {0};
 
-    // // struct tm tm;
-    // tm.tm_year = gps->date.year;
-    // tm.tm_mon =  gps->date.month - 1;
-    // tm.tm_mday = gps->date.day;
-    // tm.tm_hour = gps->tim.hour;
-    // tm.tm_min = gps->tim.minute;
-    // tm.tm_sec = gps->tim.second;
+    /* get time */
+    time_t now1 = {0};
+    char strftime_buf[64] = {0};
+    struct tm timeinfo= {0};
+
+    /* ------------------------- */
+    t.tm_year = gps->date.year + YEAR_BASE - 1900;
+    t.tm_mon = gps->date.month - 1;
+    t.tm_mday = gps->date.day;
+    t.tm_hour = gps->tim.hour;
+    t.tm_min = gps->tim.minute;
+    t.tm_sec = gps->tim.second;
+
+    time_t timeSinceEpoch = mktime(&t);
+    timeSinceEpoch += 3600 * 2;
+    printf("timestamp:%ld\n",timeSinceEpoch);
+
+    now.tv_sec = timeSinceEpoch;
+    settimeofday(&now, NULL);
+
+    /* -------------------------- */
+    time(&now1);
+    localtime_r(&now1, &timeinfo);
+    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+    printf("gettime: %d %d %d %d %d %d\n",timeinfo.tm_year + 1900,timeinfo.tm_mon,timeinfo.tm_mday,timeinfo.tm_hour,timeinfo.tm_min,timeinfo.tm_sec);
     
-    // time_t t = mktime(&tm); // + 3600;
-    
-    // printf("Setting time: %s", asctime(&tm));
-    
-   
-    
-    // struct timeval now = { .tv_sec = t };
-    // settimeofday(&now, NULL);
-    // // CET-1
-    // // adjustTime(TimeZoneCorrectionInSecons);
-    
-    // // setenv("TZ", "CET-1",1);
-    // // tzset();
-    // struct tm timeinfo;
-    // char strftime_buf[64];
-    // localtime_r(&t, &timeinfo);
-    // strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    // ESP_LOGI(TAG, "The current date/time in Oslo is: %s", strftime_buf);
+    struct tm timeinfo1;
+    //char strftime_buf[64];
+    localtime_r(&now1, &timeinfo1);
+    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo1);
+    ESP_LOGI(TAG, "The current date/time in Oslo is: %s", strftime_buf);
 
 
 }
