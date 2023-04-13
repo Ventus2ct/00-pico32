@@ -8,6 +8,10 @@
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "nmea_parser.h"
+#include <sys/time.h>
+
+// #include "time.h"
+
 
 
 // #include "esp_chip_info.h"
@@ -23,6 +27,7 @@ TaskHandle_t recvHandle = NULL;
 TaskHandle_t gpsrecvHandle = NULL;
 
 static const char *TAG = "gps_aSID";
+long TimeZoneCorrectionInSecons = 2 * 3600;
 #define TIME_ZONE (0)   //GMP + offset
 #define YEAR_BASE (2000) //date in GPS starts from 2000
 
@@ -79,11 +84,11 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
     case GPS_UPDATE:
         gps = (gps_t *)event_data;
         /* print information parsed from GPS statements */
-        ESP_LOGI(TAG, "%d/%d/%d %d:%d:%d => \r\n"
-                 "\t\t\t\t\t\tlatitude   = %.05f°N\r\n"
-                 "\t\t\t\t\t\tlongitude  = %.05f°E\r\n"
-                 "\t\t\t\t\t\taltitude   = %.02fm\r\n"
-                 "\t\t\t\t\t\tspeed      = %fm/s\r\n",
+        ESP_LOGI(TAG, "%d/%d/%d %02d:%02d:%02d => "
+                 "\tlatitude   = %.05f °N\r\n"
+                 "\t\t\t\t\t\tlongitude  = %.05f °E\r\n"
+                 "\t\t\t\t\t\taltitude   = %.02f m\r\n"
+                 "\t\t\t\t\t\tspeed      = %f m/s\r\n",
                  gps->date.year + YEAR_BASE, gps->date.month, gps->date.day,
                  gps->tim.hour + TIME_ZONE, gps->tim.minute, gps->tim.second,
                  gps->latitude, gps->longitude, gps->altitude, gps->speed);
@@ -96,6 +101,46 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
     default:
         break;
     }
+    
+    // // Europe/Oslo	CET-1CEST,M3.5.0,M10.5.0/3
+    time_t now;
+    time(&now);
+    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3",1);
+    tzset();
+    // struct tm timeinfo;
+    // char strftime_buf[64];
+    // localtime_r(&timeinfo, &timeinfo);
+    // strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+    // ESP_LOGI(TAG, "The current date/time in Oslo is: %s", strftime_buf);
+
+    // // struct tm tm;
+    // tm.tm_year = gps->date.year;
+    // tm.tm_mon =  gps->date.month - 1;
+    // tm.tm_mday = gps->date.day;
+    // tm.tm_hour = gps->tim.hour;
+    // tm.tm_min = gps->tim.minute;
+    // tm.tm_sec = gps->tim.second;
+    
+    // time_t t = mktime(&tm); // + 3600;
+    
+    // printf("Setting time: %s", asctime(&tm));
+    
+   
+    
+    // struct timeval now = { .tv_sec = t };
+    // settimeofday(&now, NULL);
+    // // CET-1
+    // // adjustTime(TimeZoneCorrectionInSecons);
+    
+    // // setenv("TZ", "CET-1",1);
+    // // tzset();
+    // struct tm timeinfo;
+    // char strftime_buf[64];
+    // localtime_r(&t, &timeinfo);
+    // strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+    // ESP_LOGI(TAG, "The current date/time in Oslo is: %s", strftime_buf);
+
+
 }
 
 void sendTask(void *arg)
