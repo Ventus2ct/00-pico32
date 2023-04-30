@@ -5,10 +5,16 @@
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/event_groups.h"
+#include "esp_wifi.h"
 #include "driver/uart.h"
+#include "esp_types.h"
+#include "esp_event.h"
 #include "esp_log.h"
 #include "nmea_parser.h"
 #include <sys/time.h>
+#include "nvs_flash.h"
+#include "string.h"
 
 // #include "time.h"
 
@@ -27,6 +33,10 @@ TaskHandle_t recvHandle = NULL;
 TaskHandle_t gpsrecvHandle = NULL;
 
 static const char *TAG = "gps_aSID";
+/* Wifi */
+static EventGroupHandle_t wifi_event_group;
+const int CONNECTED_BIT = BIT0;
+
 long TimeZoneCorrectionInSecons = 2 * 3600;
 #define TIME_ZONE (0)   //GMP + offset
 #define YEAR_BASE (2000) //date in GPS starts from 2000
@@ -43,6 +53,26 @@ long TimeZoneCorrectionInSecons = 2 * 3600;
             .event_queue_size = 16         \
         }                                  \
     }
+#define CONFIG_AP_MAX_STA_CONN 4
+
+#define CONFIG_AP_WIFI_CHANNEL 10
+#define CONFIG_AP_WIFI_PASSWORD "system"
+#define CONFIG_AP_WIFI_SSID "aSID"
+
+#define CONFIG_STA_WIFI_SSID  "EFK-wifi"
+#define CONFIG_STA_WIFI_PASSWORD "Runway0523"
+
+static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
+{
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+            ESP_LOGI(TAG, "WIFI_EVENT_STA_DISCONNECTED");
+            esp_wifi_connect();
+            xEventGroupClearBits(wifi_event_group, CONNECTED_BIT);
+    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+            ESP_LOGI(TAG, "IP_EVENT_STA_GOT_IP");
+            xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
+    }
+}
 
 void gpsTask()
 {
@@ -80,70 +110,78 @@ void gpsTask()
 static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     gps_t *gps = NULL;
+    
     switch (event_id) {
     case GPS_UPDATE:
         gps = (gps_t *)event_data;
-        //char * Stat[5] = (char) gps->valid ? "true" : "false";
-        /* print information parsed from GPS statements */
-        ESP_LOGI(TAG, "%d/%d/%d %02d:%02d:%02d => "
-                 "\tlatitude   = %.05f °N\r\n"
-                 "\t\t\t\t\t\tlongitude  = %.05f °E\r\n"
-                 "\t\t\t\t\t\taltitude   = %.02f m\r\n"
-                 "\t\t\t\t\t\tspeed      = %f m/s \r\n"
-                 "\t\t\t\t\t\tSatellites = %d \r\n"
-                 "\t\t\t\t\t\t%s",
-                 gps->date.year + YEAR_BASE, gps->date.month, gps->date.day,
-                 gps->tim.hour + TIME_ZONE, gps->tim.minute, gps->tim.second,
-                 gps->latitude, gps->longitude, gps->altitude, gps->speed, 
-                 gps->sats_in_use, gps->valid ? "Valid fix" : "No fix");
-         /* print information parsed from GPS statements */
-        // ESP_LOGI(TAG,"Satellites: %d, Valid fix: %s ", gps->sats_in_use, gps->valid ? "true" : "false");
+        if(gps->valid)
+        {
+            //char * Stat[5] = (char) gps->valid ? "true" : "false";
+            /* print information parsed from GPS statements */
+            /*
+            ESP_LOGI(TAG, "%d/%d/%d %02d:%02d:%02d => "
+                    "\tlatitude   = %.05f °N\r\n"
+                    "\t\t\t\t\t\tlongitude  = %.05f °E\r\n"
+                    "\t\t\t\t\t\taltitude   = %.02f m\r\n"
+                    "\t\t\t\t\t\tspeed      = %f m/s \r\n"
+                    "\t\t\t\t\t\tSatellites = %d \r\n"
+                    "\t\t\t\t\t\t%s",
+                    gps->date.year + YEAR_BASE, gps->date.month, gps->date.day,
+                    gps->tim.hour + TIME_ZONE, gps->tim.minute, gps->tim.second,
+                    gps->latitude, gps->longitude, gps->altitude, gps->speed, 
+                    gps->sats_in_use, gps->valid ? "Valid fix" : "No fix");
+            */
+            /* print information parsed from GPS statements */
+            // ESP_LOGI(TAG,"Satellites: %d, Valid fix: %s ", gps->sats_in_use, gps->valid ? "true" : "false");
+            /* set time */
+            struct tm t = {0}; 
+            struct timeval now = {0};
+
+            /* get time */
+            time_t now1 = {0};
+            char strftime_buf[64] = {0};
+            struct tm timeinfo= {0};
+
+            /* ------------------------- */
+            t.tm_year = gps->date.year + YEAR_BASE - 1900;
+            t.tm_mon = gps->date.month - 1;
+            t.tm_mday = gps->date.day;
+            t.tm_hour = gps->tim.hour;
+            t.tm_min = gps->tim.minute;
+            t.tm_sec = gps->tim.second;
+
+            time_t timeSinceEpoch = mktime(&t);
+            timeSinceEpoch += TimeZoneCorrectionInSecons;
+            // printf("timestamp:%ld\n",timeSinceEpoch);
+
+            now.tv_sec = timeSinceEpoch;
+            settimeofday(&now, NULL);
+
+            /* -------------------------- */
+            time(&now1);
+            localtime_r(&now1, &timeinfo);
+            strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+            // printf("gettime: %d %d %d %d %d %d\n",timeinfo.tm_year + 1900,timeinfo.tm_mon,timeinfo.tm_mday,timeinfo.tm_hour,timeinfo.tm_min,timeinfo.tm_sec);
+            
+            struct tm timeinfo1;
+            //char strftime_buf[64];
+            localtime_r(&now1, &timeinfo1);
+            strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo1);
+            ESP_LOGI(TAG, "The current date/time in Oslo is: %s\n\r", strftime_buf);
+        }
+        else
+        {
+           printf("Valid GPS: %s Sats: %d \r\n", "No fix", gps->sats_in_use);
+        }
         break;
     case GPS_UNKNOWN:
         /* print unknown statements */
         ESP_LOGW(TAG, "Unknown statement:%s", (char *)event_data);
+        
         break;
     default:
         break;
     }
-    
-    /* set time */
-    struct tm t = {0}; 
-    struct timeval now = {0};
-
-    /* get time */
-    time_t now1 = {0};
-    char strftime_buf[64] = {0};
-    struct tm timeinfo= {0};
-
-    /* ------------------------- */
-    t.tm_year = gps->date.year + YEAR_BASE - 1900;
-    t.tm_mon = gps->date.month - 1;
-    t.tm_mday = gps->date.day;
-    t.tm_hour = gps->tim.hour;
-    t.tm_min = gps->tim.minute;
-    t.tm_sec = gps->tim.second;
-
-    time_t timeSinceEpoch = mktime(&t);
-    timeSinceEpoch += TimeZoneCorrectionInSecons;
-    // printf("timestamp:%ld\n",timeSinceEpoch);
-
-    now.tv_sec = timeSinceEpoch;
-    settimeofday(&now, NULL);
-
-    /* -------------------------- */
-    time(&now1);
-    localtime_r(&now1, &timeinfo);
-    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    // printf("gettime: %d %d %d %d %d %d\n",timeinfo.tm_year + 1900,timeinfo.tm_mon,timeinfo.tm_mday,timeinfo.tm_hour,timeinfo.tm_min,timeinfo.tm_sec);
-    
-    struct tm timeinfo1;
-    //char strftime_buf[64];
-    localtime_r(&now1, &timeinfo1);
-    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo1);
-    ESP_LOGI(TAG, "The current date/time in Oslo is: %s\n\r", strftime_buf);
-
-
 }
 
 void sendTask(void *arg)
@@ -203,9 +241,97 @@ void recvTask(void *arg)
     }
 }
 
+static void initialise_wifi(void)
+{
+        esp_log_level_set("wifi", ESP_LOG_WARN);
+        static bool initialized = false;
+        if (initialized) {
+                return;
+        }
+        ESP_ERROR_CHECK(esp_netif_init());
+        wifi_event_group = xEventGroupCreate();
+        ESP_ERROR_CHECK(esp_event_loop_create_default());
+        esp_netif_t *ap_netif = esp_netif_create_default_wifi_ap();
+        assert(ap_netif);
+        esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
+        assert(sta_netif);
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
+        ESP_ERROR_CHECK( esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &event_handler, NULL) );
+        ESP_ERROR_CHECK( esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL) );
+
+        ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
+        ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_NULL) );
+        ESP_ERROR_CHECK( esp_wifi_start() );
+
+        initialized = true;
+}
+
+static bool wifi_apsta(int timeout_ms)
+{
+	wifi_config_t ap_config = { 0 };
+	strcpy((char *)ap_config.ap.ssid,CONFIG_AP_WIFI_SSID);
+	strcpy((char *)ap_config.ap.password, CONFIG_AP_WIFI_PASSWORD);
+    
+	ap_config.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
+	ap_config.ap.ssid_len = strlen("CONFIG_AP_WIFI_SSID");
+	ap_config.ap.max_connection = CONFIG_AP_MAX_STA_CONN;
+//	ap_config.ap.channel = CONFIG_AP_WIFI_CHANNEL;
+
+	if (strlen(CONFIG_AP_WIFI_PASSWORD) == 0) {
+		ap_config.ap.authmode = WIFI_AUTH_OPEN;
+	}
+
+	wifi_config_t sta_config = { 0 };
+	strcpy((char *)sta_config.sta.ssid, CONFIG_STA_WIFI_SSID);
+	strcpy((char *)sta_config.sta.password, CONFIG_STA_WIFI_PASSWORD);
+
+
+	ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_APSTA) );
+	/*
+    ESP_ERROR_CHECK( esp_wifi_set_config(ESP_IF_WIFI_AP, &ap_config) );
+	ESP_ERROR_CHECK( esp_wifi_set_config(ESP_IF_WIFI_STA, &sta_config) );
+	*/
+    ESP_ERROR_CHECK( esp_wifi_start() );
+	ESP_LOGI(TAG, "WIFI_MODE_AP started. SSID:%s password:%s channel:%d",
+			 CONFIG_AP_WIFI_SSID, CONFIG_AP_WIFI_PASSWORD, CONFIG_AP_WIFI_CHANNEL);
+    
+    ESP_LOGI(TAG, "Starting softAP");
+	ESP_ERROR_CHECK( esp_wifi_connect() );
+	int bits = xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT, pdFALSE, pdTRUE, timeout_ms / portTICK_PERIOD_MS);
+	ESP_LOGI(TAG, "bits=%x", bits);
+	if (bits) {
+		ESP_LOGI(TAG, "WIFI_MODE_STA connected. SSID:%s password:%s",
+			 CONFIG_STA_WIFI_SSID, CONFIG_STA_WIFI_PASSWORD);
+	} else {
+		ESP_LOGI(TAG, "WIFI_MODE_STA can't connected. SSID:%s password:%s",
+			 CONFIG_STA_WIFI_SSID, CONFIG_STA_WIFI_PASSWORD);
+	}
+	return (bits & CONNECTED_BIT) != 0;
+}
+
+
 void app_main() 
 {
-    printf("Initialize TWAI configuration!\n");
+    // Reset:
+    esp_err_t wifi_prov_mgr_reset_sm_state_on_failure(void);
+    //ESP_ERROR_CHECK(err_reset);
+
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+            ESP_ERROR_CHECK( nvs_flash_erase() );
+            err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+    initialise_wifi();
+
+    ESP_LOGW(TAG, "Start APSTA Mode");
+    wifi_apsta(5000);
+    
+    ESP_LOGW(TAG,"Initialize TWAI configuration!\n");
+
+    vTaskDelay(10000 / portTICK_PERIOD_MS);
+
     // Initialize configuration structures using macro initializers
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_21, GPIO_NUM_22, TWAI_MODE_NORMAL);
     // for 33.3 kHz
@@ -254,7 +380,6 @@ typedef struct {
     }
     // NMEA_PARSER_CONFIG_aSid()
 
-
     /* NMEA parser configuration */
     nmea_parser_config_t config = NMEA_PARSER_CONFIG_aSid();
     //nmea_parser_config_t config = NMEA_PARSER_CONFIG_DEFAULT();
@@ -273,9 +398,11 @@ typedef struct {
     // ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, BUF_SIZE * 2, 256, 0, NULL, 0));
 
     // xTaskCreate(sendTask, "Send Task", 4096, NULL, 10, &sendHandle);
-    xTaskCreate(recvTask, "Recv Task", 4096, NULL, 10, &recvHandle);
+  // Only GPS  xTaskCreate(recvTask, "Recv Task", 4096, NULL, 10, &recvHandle);
     //xTaskCreate(gpsTask, "GPS Task", 4096, NULL, 10, &gpsrecvHandle);
     // gpsrecvHandle gpsTask
+
+
 }
 
 void first_main() 
