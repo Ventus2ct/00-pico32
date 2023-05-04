@@ -32,7 +32,7 @@ TaskHandle_t sendHandle = NULL;
 TaskHandle_t recvHandle = NULL;
 TaskHandle_t gpsrecvHandle = NULL;
 
-static const char *TAG = "gps_aSID";
+static const char *TAG = "aSID";
 /* Wifi */
 static EventGroupHandle_t wifi_event_group;
 const int CONNECTED_BIT = BIT0;
@@ -56,11 +56,14 @@ long TimeZoneCorrectionInSecons = 2 * 3600;
 #define CONFIG_AP_MAX_STA_CONN 4
 
 #define CONFIG_AP_WIFI_CHANNEL 10
-#define CONFIG_AP_WIFI_PASSWORD "system"
+#define CONFIG_AP_WIFI_PASSWORD "system01" // Password must be 8 or more characters!!
 #define CONFIG_AP_WIFI_SSID "aSID"
 
-#define CONFIG_STA_WIFI_SSID  "EFK-wifi"
-#define CONFIG_STA_WIFI_PASSWORD "Runway0523"
+#define CONFIG_STA_WIFI_SSID  "bamsebo"
+#define CONFIG_STA_WIFI_PASSWORD "system-B2"
+
+// #define CONFIG_STA_WIFI_SSID  "EFK-wifi"
+// #define CONFIG_STA_WIFI_PASSWORD "Runway0523"
 
 static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
@@ -167,7 +170,7 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
             //char strftime_buf[64];
             localtime_r(&now1, &timeinfo1);
             strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo1);
-            ESP_LOGI(TAG, "The current date/time in Oslo is: %s\n\r", strftime_buf);
+            ESP_LOGI(TAG, "The current date/time in Oslo is: %s\r", strftime_buf);
         }
         else
         {
@@ -244,9 +247,10 @@ void recvTask(void *arg)
 static void initialise_wifi(void)
 {
         esp_log_level_set("wifi", ESP_LOG_WARN);
+        // esp_log_level_set("wifi", ESP_LOG_DEBUG);
         static bool initialized = false;
         if (initialized) {
-                return;
+            return;
         }
         ESP_ERROR_CHECK(esp_netif_init());
         wifi_event_group = xEventGroupCreate();
@@ -274,9 +278,9 @@ static bool wifi_apsta(int timeout_ms)
 	strcpy((char *)ap_config.ap.password, CONFIG_AP_WIFI_PASSWORD);
     
 	ap_config.ap.authmode = WIFI_AUTH_WPA_WPA2_PSK;
-	ap_config.ap.ssid_len = strlen("CONFIG_AP_WIFI_SSID");
+	ap_config.ap.ssid_len = strlen(CONFIG_AP_WIFI_SSID);
 	ap_config.ap.max_connection = CONFIG_AP_MAX_STA_CONN;
-//	ap_config.ap.channel = CONFIG_AP_WIFI_CHANNEL;
+	ap_config.ap.channel = CONFIG_AP_WIFI_CHANNEL;
 
 	if (strlen(CONFIG_AP_WIFI_PASSWORD) == 0) {
 		ap_config.ap.authmode = WIFI_AUTH_OPEN;
@@ -286,18 +290,24 @@ static bool wifi_apsta(int timeout_ms)
 	strcpy((char *)sta_config.sta.ssid, CONFIG_STA_WIFI_SSID);
 	strcpy((char *)sta_config.sta.password, CONFIG_STA_WIFI_PASSWORD);
 
-
-	ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_APSTA) );
+	// ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_APSTA) );
 	/*
     ESP_ERROR_CHECK( esp_wifi_set_config(ESP_IF_WIFI_AP, &ap_config) );
 	ESP_ERROR_CHECK( esp_wifi_set_config(ESP_IF_WIFI_STA, &sta_config) );
-	*/
+    
+    */
+    esp_wifi_set_mode(WIFI_MODE_APSTA);
+    esp_wifi_set_config(ESP_IF_WIFI_AP, &ap_config);
+    esp_wifi_set_config(ESP_IF_WIFI_STA, &sta_config);
+
     ESP_ERROR_CHECK( esp_wifi_start() );
+    
 	ESP_LOGI(TAG, "WIFI_MODE_AP started. SSID:%s password:%s channel:%d",
 			 CONFIG_AP_WIFI_SSID, CONFIG_AP_WIFI_PASSWORD, CONFIG_AP_WIFI_CHANNEL);
     
     ESP_LOGI(TAG, "Starting softAP");
-	ESP_ERROR_CHECK( esp_wifi_connect() );
+	// ESP_ERROR_CHECK( esp_wifi_connect() );
+    esp_wifi_connect(); 
 	int bits = xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT, pdFALSE, pdTRUE, timeout_ms / portTICK_PERIOD_MS);
 	ESP_LOGI(TAG, "bits=%x", bits);
 	if (bits) {
@@ -315,7 +325,6 @@ void app_main()
 {
     // Reset:
     esp_err_t wifi_prov_mgr_reset_sm_state_on_failure(void);
-    //ESP_ERROR_CHECK(err_reset);
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -360,7 +369,7 @@ typedef struct {
     // Install TWAI driver
     if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK)
     {
-        printf("Driver installed\n");
+        printf("TWAI Driver installed\n");
     }
     else
     {
@@ -371,7 +380,7 @@ typedef struct {
     // Start TWAI driver
     if (twai_start() == ESP_OK)
     {
-        printf("Driver started\n");
+        printf("TWAI Driver started\n");
     }
     else
     {
@@ -401,6 +410,13 @@ typedef struct {
   // Only GPS  xTaskCreate(recvTask, "Recv Task", 4096, NULL, 10, &recvHandle);
     //xTaskCreate(gpsTask, "GPS Task", 4096, NULL, 10, &gpsrecvHandle);
     // gpsrecvHandle gpsTask
+
+    wifi_config_t wifi_cfg;
+    esp_wifi_get_config(ESP_IF_WIFI_AP, &wifi_cfg);
+     if (strlen((const char*) wifi_cfg.ap.ssid)) {
+        ESP_LOGI(TAG, "Found ssid %s",     (const char*) wifi_cfg.ap.ssid);
+        ESP_LOGI(TAG, "Found password %s", (const char*) wifi_cfg.ap.password);
+    }
 
 
 }
