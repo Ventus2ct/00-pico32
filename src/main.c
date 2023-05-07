@@ -15,6 +15,7 @@
 #include <sys/time.h>
 #include "nvs_flash.h"
 #include "string.h"
+#include <esp_http_server.h>
 
 // #include "time.h"
 
@@ -170,7 +171,7 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
             //char strftime_buf[64];
             localtime_r(&now1, &timeinfo1);
             strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo1);
-            ESP_LOGI(TAG, "The current date/time in Oslo is: %s\r", strftime_buf);
+            ESP_LOGI(TAG, "Oslo time is: %s\r", strftime_buf);
         }
         else
         {
@@ -320,6 +321,36 @@ static bool wifi_apsta(int timeout_ms)
 	return (bits & CONNECTED_BIT) != 0;
 }
 
+esp_err_t test_handler(httpd_req_t *req)
+{
+
+    const char resp[] = "<h1>Hello from @SID</h1>";
+    httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+void WebServerSetup()
+{
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    httpd_handle_t server = NULL;
+    if (httpd_start(&server, &config) == ESP_OK) {
+        // Do something
+    }
+    // esp_err_t httpd_start(httpd_handle_t *handle, const httpd_config_t *config);
+    
+  
+    httpd_uri_t test_uri = {
+        .uri      = "/test",
+        .method   = HTTP_GET,
+        .handler  = test_handler,
+        .user_ctx = NULL
+    };
+    httpd_register_uri_handler(server, &test_uri);
+
+    // esp_err_t httpd_resp_send(httpd_req_t *r, const char *buf, ssize_t buf_len);
+
+}
+
 
 void app_main() 
 {
@@ -417,7 +448,7 @@ typedef struct {
         ESP_LOGI(TAG, "Found ssid %s",     (const char*) wifi_cfg.ap.ssid);
         ESP_LOGI(TAG, "Found password %s", (const char*) wifi_cfg.ap.password);
     }
-
+    WebServerSetup();
 
 }
 
