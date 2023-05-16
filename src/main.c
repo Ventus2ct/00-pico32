@@ -38,6 +38,8 @@ static const char *TAG = "aSID";
 static EventGroupHandle_t wifi_event_group;
 const int CONNECTED_BIT = BIT0;
 
+char g_strftime_buf[64] = {0};
+
 long TimeZoneCorrectionInSecons = 2 * 3600;
 #define TIME_ZONE (0)   //GMP + offset
 #define YEAR_BASE (2000) //date in GPS starts from 2000
@@ -114,6 +116,7 @@ void gpsTask()
 static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     gps_t *gps = NULL;
+    ESP_LOGI(TAG,"GPS Event ");
     
     switch (event_id) {
     case GPS_UPDATE:
@@ -165,6 +168,7 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
             time(&now1);
             localtime_r(&now1, &timeinfo);
             strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+            strftime(g_strftime_buf, sizeof(g_strftime_buf), "%c", &timeinfo);
             // printf("gettime: %d %d %d %d %d %d\n",timeinfo.tm_year + 1900,timeinfo.tm_mon,timeinfo.tm_mday,timeinfo.tm_hour,timeinfo.tm_min,timeinfo.tm_sec);
             
             struct tm timeinfo1;
@@ -323,9 +327,22 @@ static bool wifi_apsta(int timeout_ms)
 
 esp_err_t test_handler(httpd_req_t *req)
 {
+    // time_t rawtime;
+    // struct tm * timeinfo;
+    // char buffer[80];
 
-    const char resp[] = "<h1>Hello from @SID</h1>";
-    httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+    // time (&rawtime);
+    // timeinfo = localtime(&rawtime);
+
+    // strftime(buffer,sizeof(buffer),"%d-%m-%Y %H:%M:%S",timeinfo);
+
+    // const char resp[] = "<h1>Hello from @SID</h1></br>";
+
+    // strcat(buffer, resp);
+
+    // httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
+    // httpd_resp_send(req, buffer, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send(req, g_strftime_buf, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
@@ -354,19 +371,7 @@ void WebServerSetup()
 
 void app_main() 
 {
-    // Reset:
-    esp_err_t wifi_prov_mgr_reset_sm_state_on_failure(void);
 
-    esp_err_t err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-            ESP_ERROR_CHECK( nvs_flash_erase() );
-            err = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(err);
-    initialise_wifi();
-
-    ESP_LOGW(TAG, "Start APSTA Mode");
-    wifi_apsta(5000);
     
     ESP_LOGW(TAG,"Initialize TWAI configuration!\n");
 
@@ -426,9 +431,17 @@ typedef struct {
     
     /* init NMEA parser library */
     nmea_parser_handle_t nmea_hdl = nmea_parser_init(&config);
-
+    printf("NMEA parser initsalized\n");
     /* register event handler for NMEA parser library */
-    nmea_parser_add_handler(nmea_hdl, gps_event_handler, NULL);
+    esp_err_t nmea_err = nmea_parser_add_handler(nmea_hdl, gps_event_handler, NULL);
+    if(nmea_err == ESP_OK)
+    {
+        ESP_LOGI(TAG, "NMEA parser handler setup");
+    }
+    else
+    {
+        ESP_LOGI(TAG, "MEA parser handler setup FAILED!\n");
+    }
     
 
     vTaskDelay(10000 / portTICK_PERIOD_MS);
@@ -439,15 +452,32 @@ typedef struct {
 
     // xTaskCreate(sendTask, "Send Task", 4096, NULL, 10, &sendHandle);
   // Only GPS  xTaskCreate(recvTask, "Recv Task", 4096, NULL, 10, &recvHandle);
-    //xTaskCreate(gpsTask, "GPS Task", 4096, NULL, 10, &gpsrecvHandle);
-    // gpsrecvHandle gpsTask
+    // ESP_LOGI(TAG, "Starting GPS Task for uart read..");
+    // xTaskCreate(gpsTask, "GPS Task", 4096, NULL, 10, &gpsrecvHandle);
+    //gpsrecvHandle gpsTask
 
+
+    // Wifi
+    // Reset:
+    esp_err_t wifi_prov_mgr_reset_sm_state_on_failure(void);
+
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+            ESP_ERROR_CHECK( nvs_flash_erase() );
+            err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
+    initialise_wifi();
+
+    ESP_LOGW(TAG, "Start APSTA Mode");
+    wifi_apsta(5000);
     wifi_config_t wifi_cfg;
     esp_wifi_get_config(ESP_IF_WIFI_AP, &wifi_cfg);
      if (strlen((const char*) wifi_cfg.ap.ssid)) {
         ESP_LOGI(TAG, "Found ssid %s",     (const char*) wifi_cfg.ap.ssid);
         ESP_LOGI(TAG, "Found password %s", (const char*) wifi_cfg.ap.password);
     }
+    
     WebServerSetup();
 
 }

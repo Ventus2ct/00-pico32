@@ -293,7 +293,7 @@ static void parse_rmc(esp_gps_t *esp_gps)
 }
 // #endif
 
-#if CONFIG_NMEA_STATEMENT_GLL
+//#if CONFIG_NMEA_STATEMENT_GLL
 /**
  * @brief Parse GLL statements
  *
@@ -329,9 +329,9 @@ static void parse_gll(esp_gps_t *esp_gps)
         break;
     }
 }
-#endif
+//#endif
 
-#if CONFIG_NMEA_STATEMENT_VTG
+//#if CONFIG_NMEA_STATEMENT_VTG
 /**
  * @brief Parse VTG statements
  *
@@ -357,7 +357,7 @@ static void parse_vtg(esp_gps_t *esp_gps)
         break;
     }
 }
-#endif
+//#endif
 
 /**
  * @brief Parse received item
@@ -392,16 +392,16 @@ static esp_err_t parse_item(esp_gps_t *esp_gps)
             esp_gps->cur_statement = STATEMENT_GSV;
         }
 // #endif
-#if CONFIG_NMEA_STATEMENT_GLL
+//#if CONFIG_NMEA_STATEMENT_GLL
         else if (strstr(esp_gps->item_str, "GLL")) {
             esp_gps->cur_statement = STATEMENT_GLL;
         }
-#endif
-#if CONFIG_NMEA_STATEMENT_VTG
+// #endif
+// #if CONFIG_NMEA_STATEMENT_VTG
         else if (strstr(esp_gps->item_str, "VTG")) {
             esp_gps->cur_statement = STATEMENT_VTG;
         }
-#endif
+// #endif
         else {
             esp_gps->cur_statement = STATEMENT_UNKNOWN;
         }
@@ -431,16 +431,16 @@ static esp_err_t parse_item(esp_gps_t *esp_gps)
         parse_rmc(esp_gps);
     }
 // #endif
-#if CONFIG_NMEA_STATEMENT_GLL
+// #if CONFIG_NMEA_STATEMENT_GLL
     else if (esp_gps->cur_statement == STATEMENT_GLL) {
         parse_gll(esp_gps);
     }
-#endif
-#if CONFIG_NMEA_STATEMENT_VTG
+//#endif
+//#if CONFIG_NMEA_STATEMENT_VTG
     else if (esp_gps->cur_statement == STATEMENT_VTG) {
         parse_vtg(esp_gps);
     }
-#endif
+//#endif
     else {
         err =  ESP_FAIL;
     }
@@ -457,6 +457,9 @@ out:
  */
 static esp_err_t gps_decode(esp_gps_t *esp_gps, size_t len)
 {
+    // lrb
+    ESP_LOGV(GPS_TAG, "Decoding NMEA");
+    //
     const uint8_t *d = esp_gps->buffer;
     while (*d) {
         /* Start of a statement */
