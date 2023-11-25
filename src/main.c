@@ -39,6 +39,7 @@ static EventGroupHandle_t wifi_event_group;
 const int CONNECTED_BIT = BIT0;
 
 char g_strftime_buf[64] = {0};
+int g_last_gps_echo_count = 0;
 
 long TimeZoneCorrectionInSecons = 2 * 3600;
 #define TIME_ZONE (0)   //GMP + offset
@@ -77,7 +78,13 @@ static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
             ESP_LOGI(TAG, "IP_EVENT_STA_GOT_IP");
             xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
+    } else if(event_base == IP_EVENT && event_id == IP_EVENT_STA_LOST_IP) {
+            ESP_LOGI(TAG, "IP_EVENT_STA_LOST_IP");
+            esp_wifi_disconnect();
+            esp_wifi_connect();
+            xEventGroupSetBits(wifi_event_group, CONNECTED_BIT);
     }
+    
 }
 
 void gpsTask()
@@ -116,7 +123,7 @@ void gpsTask()
 static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     gps_t *gps = NULL;
-    ESP_LOGI(TAG,"GPS Event ");
+    ESP_LOGD(TAG,"GPS Event ");
     
     switch (event_id) {
     case GPS_UPDATE:
@@ -175,7 +182,13 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
             //char strftime_buf[64];
             localtime_r(&now1, &timeinfo1);
             strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo1);
-            ESP_LOGI(TAG, "Oslo time is: %s\r", strftime_buf);
+            g_last_gps_echo_count +=1;
+            if(g_last_gps_echo_count > 9)
+            {
+                ESP_LOGI(TAG, "Oslo time is: %s\r", strftime_buf);
+                g_last_gps_echo_count = 0;
+            }
+            
         }
         else
         {
@@ -220,7 +233,20 @@ void sendTask(void *arg)
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
-
+void reconnectTask(void *arg)
+{
+    // WIFI_EVENT_STA_DISCONNECTED
+    // IP_EVENT_STA_GOT_IP
+//    unsigned long currentMillis = millis();
+//   // if WiFi is down, try reconnecting every CHECK_WIFI_TIME seconds
+//   if ((WiFi.status() != WL_CONNECTED) && (currentMillis - previousMillis >=interval)) {
+//     Serial.print(millis());
+//     Serial.println("Reconnecting to WiFi...");
+//     WiFi.disconnect();
+//     WiFi.reconnect();
+//     previousMillis = currentMillis;
+//   }
+}
 void recvTask(void *arg)
 {
     twai_message_t message;
@@ -261,13 +287,20 @@ static void initialise_wifi(void)
         wifi_event_group = xEventGroupCreate();
         ESP_ERROR_CHECK(esp_event_loop_create_default());
         esp_netif_t *ap_netif = esp_netif_create_default_wifi_ap();
+
+        
         assert(ap_netif);
         esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta();
+
+        // Set the hostname for the network interface
+        esp_netif_set_hostname(sta_netif, "aSid");
+
         assert(sta_netif);
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
         ESP_ERROR_CHECK( esp_wifi_init(&cfg) );
         ESP_ERROR_CHECK( esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &event_handler, NULL) );
         ESP_ERROR_CHECK( esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL) );
+        ESP_ERROR_CHECK( esp_event_handler_register(IP_EVENT, IP_EVENT_STA_LOST_IP, &event_handler, NULL) );
 
         ESP_ERROR_CHECK( esp_wifi_set_storage(WIFI_STORAGE_RAM) );
         ESP_ERROR_CHECK( esp_wifi_set_mode(WIFI_MODE_NULL) );
@@ -276,8 +309,17 @@ static void initialise_wifi(void)
         initialized = true;
 }
 
+// static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
+// {
+//     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+//         esp_wifi_connect();
+//         ESP_LOGI(TAG,"Reconnecting");
+//     }
+// }
+
 static bool wifi_apsta(int timeout_ms)
 {
+    // EventGroupHandle_t s_wifi_event_group = xEventGroupCreate();
 	wifi_config_t ap_config = { 0 };
 	strcpy((char *)ap_config.ap.ssid,CONFIG_AP_WIFI_SSID);
 	strcpy((char *)ap_config.ap.password, CONFIG_AP_WIFI_PASSWORD);
@@ -327,21 +369,36 @@ static bool wifi_apsta(int timeout_ms)
 
 esp_err_t test_handler(httpd_req_t *req)
 {
-    // time_t rawtime;
-    // struct tm * timeinfo;
-    // char buffer[80];
+    // char sPage[]="300";
+    // char sHead[120]="<!doctype html>\r\n";
+    // //char sBody[120]="<html><head><title>aSid</title><meta http-equiv=""refresh"" content=""10""></head><body><h2> ";
+    // char sBody[120]="<html><head><title>aSid</title></head><body><h2> ";
+    // char sFoot[120]="</h2></body></html>";
+    // sprintf(sPage,"%s %s %s %s", sHead,sBody, g_strftime_buf, sFoot);
+    // httpd_resp_send(req, sPage, HTTPD_RESP_USE_STRLEN);
 
-    // time (&rawtime);
-    // timeinfo = localtime(&rawtime);
+    char on_resp[] = "<!DOCTYPE html><html><head><style type=\"text/css\">html "
+                     "{ font-family: Arial;  display: inline-block;  margin: 0px auto;"
+                     "  text-align: center;}h1{  color: #070812;  padding: 2vh;}.button {  display: inline-block;"
+                     "  background-color: #b30000; //red color  border: none;  border-radius: 4px;  color: white;  " 
+                     " padding: 16px 40px;  text-decoration: none;  font-size: 30px;  margin: 2px;  cursor: pointer;}.button2 "
+                     " {  background-color: #364cf4; //blue color}.content {   padding: 50px;}.card-grid {  max-width: 800px;  margin: 0 auto;  "
+                     " display: grid;  grid-gap: 2rem;  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));}"
+                     ".card {  background-color: white;  box-shadow: 2px 2px 12px 1px rgba(140,140,140,.5);}"
+                     ".card-title {  font-size: 1.2rem;  font-weight: bold;  color: #034078}</style>"
+                     "  <title>ESP32 WEB SERVER</title>  "
+                     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">  "
+                     "<link rel=\"icon\" href=\"data:,\">  <link rel=\"stylesheet\" "
+                     "href=\"https://use.fontawesome.com/releases/v5.7.2/css/all.css\"    "
+                     "integrity=\"sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr\" "
+                     "crossorigin=\"anonymous\">  <link rel=\"stylesheet\" type=\"text/css\" ></head>"
+                     "<body>  <h2>ESP32 WEB SERVER</h2>  <div class=\"content\">    <div class=\"card-grid\">      "
+                     "<div class=\"card\">        <p><i class=\"fas fa-lightbulb fa-2x\" style=\"color:#c81919;\"></i>    "
+                     " <strong>GPIO2</strong></p>        <p>GPIO state: <strong> ON</strong></p>        <p>          "
+                     "<a href=\"/led2on\"><button class=\"button\">ON</button></a>          "
+                     "<a href=\"/led2off\"><button class=\"button button2\">OFF</button></a>        "
+                     "</p>      </div>    </div>  </div></body></html>";
 
-    // strftime(buffer,sizeof(buffer),"%d-%m-%Y %H:%M:%S",timeinfo);
-
-    // const char resp[] = "<h1>Hello from @SID</h1></br>";
-
-    // strcat(buffer, resp);
-
-    // httpd_resp_send(req, resp, HTTPD_RESP_USE_STRLEN);
-    // httpd_resp_send(req, buffer, HTTPD_RESP_USE_STRLEN);
     httpd_resp_send(req, g_strftime_buf, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
@@ -423,8 +480,7 @@ typedef struct {
         printf("Failed to start driver\n");
         return;
     }
-    // NMEA_PARSER_CONFIG_aSid()
-
+    
     /* NMEA parser configuration */
     nmea_parser_config_t config = NMEA_PARSER_CONFIG_aSid();
     //nmea_parser_config_t config = NMEA_PARSER_CONFIG_DEFAULT();
@@ -432,6 +488,7 @@ typedef struct {
     /* init NMEA parser library */
     nmea_parser_handle_t nmea_hdl = nmea_parser_init(&config);
     printf("NMEA parser initsalized\n");
+    
     /* register event handler for NMEA parser library */
     esp_err_t nmea_err = nmea_parser_add_handler(nmea_hdl, gps_event_handler, NULL);
     if(nmea_err == ESP_OK)
@@ -451,10 +508,10 @@ typedef struct {
     // ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, BUF_SIZE * 2, 256, 0, NULL, 0));
 
     // xTaskCreate(sendTask, "Send Task", 4096, NULL, 10, &sendHandle);
-  // Only GPS  xTaskCreate(recvTask, "Recv Task", 4096, NULL, 10, &recvHandle);
+    // Only GPS  xTaskCreate(recvTask, "Recv Task", 4096, NULL, 10, &recvHandle);
     // ESP_LOGI(TAG, "Starting GPS Task for uart read..");
     // xTaskCreate(gpsTask, "GPS Task", 4096, NULL, 10, &gpsrecvHandle);
-    //gpsrecvHandle gpsTask
+    // gpsrecvHandle gpsTask
 
 
     // Wifi
